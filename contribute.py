@@ -21,6 +21,46 @@ REPOSITORY_PREFIX = 'repository-'
 README_FILENAME = 'README.md'
 MAIN_BRANCH = 'main'
 
+class Args:
+    """
+    Interface for command-line arguments.
+    """
+    no_weekends: bool
+    max_commits: int
+    frequency: int
+    repository: str
+    user_name: str
+    user_email: str
+    day_start: datetime
+    day_end: datetime
+    
+    def __init__(self, no_weekends: bool, max_commits: int, frequency: int, repository: str,
+                 user_name: str, user_email: str, day_start: datetime, day_end: datetime):
+        self.no_weekends = no_weekends
+        self.max_commits = max_commits
+        self.frequency = frequency
+        self.repository = repository
+        self.user_name = user_name
+        self.user_email = user_email
+        self.day_start = day_start
+        self.day_end = day_end
+
+    @classmethod
+    def from_argparse(cls, args: argparse.Namespace) -> 'Args':
+        """
+        Create Args instance from argparse.Namespace.
+        """
+        return cls(
+            no_weekends=args.no_weekends,
+            max_commits=args.max_commits,
+            frequency=args.frequency,
+            repository=args.repository,
+            user_name=args.user_name,
+            user_email=args.user_email,
+            day_start=datetime.strptime(args.day_start, '%Y-%m-%d'),
+            day_end=datetime.strptime(args.day_end, '%Y-%m-%d') if args.day_end != 'now' else datetime.now()
+        )
+
 def main(def_args: List[str] = sys.argv[1:]) -> None:
     """
     Main function to generate a Git repository with fake contributions.
@@ -35,7 +75,7 @@ def main(def_args: List[str] = sys.argv[1:]) -> None:
     print('\nRepository generation ' +
           '\x1b[6;30;42mcompleted successfully\x1b[0m!')
 
-def parse_arguments(argsval: List[str]) -> argparse.Namespace:
+def parse_arguments(argsval: List[str]) -> Args:
     """
     Parse command-line arguments.
     """
@@ -52,28 +92,41 @@ def parse_arguments(argsval: List[str]) -> argparse.Namespace:
                         help="Git user.name config override")
     parser.add_argument('-ue', '--user_email', type=str,
                         help="Git user.email config override")
-    parser.add_argument('-db', '--days_before', type=int, default=DEFAULT_DAYS_BEFORE,
-                        help="Number of days before current date to start commits")
-    parser.add_argument('-da', '--days_after', type=int, default=DEFAULT_DAYS_AFTER,
-                        help="Number of days after current date to end commits")
-    return parser.parse_args(argsval)
+    parser.add_argument('-ds', '--day_start', type=str,
+                        help="Start date to add commits")
+    parser.add_argument('-de', '--day_end', type=str, default='now',
+                        help="End date to add commits")
+    return Args.from_argparse(parser.parse_args(argsval))
 
-def validate_args(args: argparse.Namespace) -> None:
+def validate_args(args: Args) -> None:
     """
     Validate command-line arguments.
     """
-    if args.days_before < 0:
-        sys.exit('days_before must not be negative')
-    if args.days_after < 0:
-        sys.exit('days_after must not be negative')
-
-def create_repository(args: argparse.Namespace) -> str:
+    if not args.repository:
+        print('Repository name is required', file=sys.stderr)
+        sys.exit(1)
+    else:
+        try:
+            subprocess.check_output(['gh', 'repo', 'view', args.repository])
+        except subprocess.CalledProcessError:
+            print(f"Repository {args.repository} does not exist", file=sys.stderr)
+            sys.exit(1)
+    
+    if args.day_end < args.day_start:
+        print('Start date cannot be after end date', file=sys.stderr)
+        sys.exit(1)
+    
+    if args.day_start > datetime.now():
+        print('Start date cannot be in the future', file=sys.stderr)
+        sys.exit(1)
+            
+def create_repository(args: Args) -> str:
     """
     Create and initialize a new Git repository.
     """
     curr_date = datetime.now()
     if args.repository:
-        directory = extract_repo_name(args.repository)
+        directory = args.repository
     else:
         directory = f"{REPOSITORY_PREFIX}{curr_date.strftime('%Y-%m-%d-%H-%M-%S')}"
     if os.path.exists(directory):
@@ -92,7 +145,7 @@ def extract_repo_name(repository: str) -> str:
     match = re.search(pattern, repository)
     return match.group(1) if match else ''
 
-def configure_git(args: argparse.Namespace) -> None:
+def configure_git(args: Args) -> None:
     """
     Configure Git user name and email if provided.
     """
@@ -101,17 +154,13 @@ def configure_git(args: argparse.Namespace) -> None:
     if args.user_email:
         run(['git', 'config', 'user.email', args.user_email])
 
-def generate_commits(args: argparse.Namespace) -> None:
+def generate_commits(args: Args) -> None:
     """
     Generate commits based on the specified parameters.
     """
-    curr_date = datetime.now()
-    start_date = curr_date.replace(hour=14, minute=0) - timedelta(days=args.days_before)
-    end_date = start_date + timedelta(days=args.days_after)
+    start_date = args.day_start
+    end_date = args.day_end
     
-    print('start date: ' + start_date.strftime('%Y-%m-%d %H:%M'))
-    print('end date: ' + end_date.strftime('%Y-%m-%d %H:%M'))
-
     for day in date_range(start_date, end_date):
         if should_commit(day, args.no_weekends, args.frequency):
             for commit_time in commit_times_for_day(day, args):
@@ -169,19 +218,13 @@ def push_to_remote(args) -> None:
     """
     Push the generated commits to the remote repository if specified.
     """
-    # try:
-    #     subprocess.check_output(['gh', 'repo', 'view', directory])
-    # except subprocess.CalledProcessError:
-    #     print(f"Repository {directory} does not exist, creating...")
-    #     run(['gh', 'repo', 'create', '--private', directory])
-    
-    # directory_url = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'url', directory]).decode('utf-8').strip())
     
     try:
         subprocess.check_output(['git', 'remote', 'get-url', 'origin']).decode('utf-8').strip()
     except subprocess.CalledProcessError:
         print("Remote origin does not exist, adding...")
-        run(['git', 'remote', 'add', 'origin', args.repository])
+        directory_url = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'url', args.repository]).decode('utf-8').strip())
+        run(['git', 'remote', 'add', 'origin', directory_url['url']])
         
     run(['git', 'branch', '-M', MAIN_BRANCH])
     run(['git', 'push', '-u', 'origin', MAIN_BRANCH])
