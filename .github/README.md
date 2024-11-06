@@ -13,8 +13,10 @@ the graph on your GitHub profile (which carries no value), they deserve to see a
 ![After](after.png)
 
 # Prerequisites
-- Github CLI
-- PyQt6
+- Github CLI: https://cli.github.com/
+- SSH authentication with Github: 
+    - https://docs.github.com/en/authentication/connecting-to-github-with-ssh
+    - `gh auth login`
 
 ## How to use
 1. Create an empty GitHub repository. Do not initialize it.
