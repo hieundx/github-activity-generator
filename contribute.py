@@ -15,8 +15,6 @@ MAX_COMMITS_PER_DAY = 20
 MIN_COMMITS_PER_DAY = 1
 DEFAULT_MAX_COMMITS = 10
 DEFAULT_FREQUENCY = 80
-DEFAULT_DAYS_BEFORE = 365
-DEFAULT_DAYS_AFTER = 0
 REPOSITORY_PREFIX = 'repository-'
 README_FILENAME = 'README.md'
 MAIN_BRANCH = 'main'
@@ -104,21 +102,20 @@ def validate_args(args: Args) -> None:
     """
     if not args.repository:
         print('Repository name is required', file=sys.stderr)
-        sys.exit(1)
+        raise ValueError('Repository name is required')
     else:
         try:
             subprocess.check_output(['gh', 'repo', 'view', args.repository])
         except subprocess.CalledProcessError:
             print(f"Repository {args.repository} does not exist", file=sys.stderr)
-            sys.exit(1)
-    
+            raise ValueError(f"Repository {args.repository} does not exist")
     if args.day_end < args.day_start:
         print('Start date cannot be after end date', file=sys.stderr)
-        sys.exit(1)
+        raise ValueError('Start date cannot be after end date')
     
-    if args.day_start > datetime.now():
+    if args.day_start > datetime.now().date():
         print('Start date cannot be in the future', file=sys.stderr)
-        sys.exit(1)
+        raise ValueError('Start date cannot be in the future')
             
 def create_repository(args: Args) -> str:
     """
