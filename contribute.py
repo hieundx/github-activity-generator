@@ -223,8 +223,8 @@ def push_to_remote(args) -> None:
         subprocess.check_output(['git', 'remote', 'get-url', 'origin']).decode('utf-8').strip()
     except subprocess.CalledProcessError:
         print("Remote origin does not exist, adding...")
-        directory_url = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'url', args.repository]).decode('utf-8').strip())
-        run(['git', 'remote', 'add', 'origin', directory_url['url']])
+        directory_url = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'sshUrl', args.repository]).decode('utf-8').strip())
+        run(['git', 'remote', 'add', 'origin', directory_url['sshUrl']])
         
     run(['git', 'branch', '-M', MAIN_BRANCH])
     run(['git', 'push', '-u', 'origin', MAIN_BRANCH])
