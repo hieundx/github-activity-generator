@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from random import randint
 from subprocess import Popen
 from typing import List, Optional
+import pandas as pd
+import numpy as np
 
 # Constants
 MAX_COMMITS_PER_DAY = 20
@@ -31,9 +33,10 @@ class Args:
     user_email: str
     day_start: datetime
     day_end: datetime
+    num_clusters: int
     
     def __init__(self, no_weekends: bool, max_commits: int, frequency: int, repository: str,
-                 user_name: str, user_email: str, day_start: datetime, day_end: datetime):
+                 user_name: str, user_email: str, day_start: datetime, day_end: datetime, num_clusters: int = 1):
         self.no_weekends = no_weekends
         self.max_commits = max_commits
         self.frequency = frequency
@@ -42,6 +45,7 @@ class Args:
         self.user_email = user_email
         self.day_start = day_start
         self.day_end = day_end
+        self.num_clusters = num_clusters
 
     @classmethod
     def from_argparse(cls, args: argparse.Namespace) -> 'Args':
@@ -157,11 +161,19 @@ def generate_commits(args: Args) -> None:
     """
     start_date = args.day_start
     end_date = args.day_end
+    max_commits = args.max_commits
+    frequency = args.frequency / 100
     
-    for day in date_range(start_date, end_date):
-        if should_commit(day, args.no_weekends, args.frequency):
-            for commit_time in commit_times_for_day(day, args):
-                create_commit(commit_time)
+    dates = pd.date_range(start=start_date, end=end_date)
+    
+    commit_data = [np.random.randint(0, np.random.randint(1, max_commits)) if np.random.rand() < frequency else 0 for _ in range(len(dates))]
+
+    df = pd.DataFrame({'date': dates, 'commits': commit_data})
+    for index, row in df.iterrows():
+        if row['commits'] > 0:
+            for n_commit in range(row['commits']):
+                create_commit(row['date'] + timedelta(minutes=n_commit))
+
 
 def date_range(start_date: datetime, end_date: datetime) -> List[datetime]:
     """
